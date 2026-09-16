@@ -1,0 +1,90 @@
+📋 TO-DO — Chat criptata E2E (HTML+JS+CSS)
+Fase 1 — Setup · 1-2h
+ Repo GitHub pubblico + README.md, .gitignore, licenza MIT
+ Struttura:
+
+src/
+  main.js        → avvio, collegamento tutto
+  crypto.js      → ECDH + AES-GCM
+  connection.js  → PeerJS/DataChannel
+  chat.js        → invio/ricezione messaggi
+  ui.js          → schermate
+  style.css
+ Deploy su GitHub Pages
+✅ Fatto quando: la pagina demo è online
+
+Fase 2 — GUI chat · 3-5h
+ Schermata "Crea stanza" / "Entra con codice"
+ Lista messaggi con bolle, input, invio
+ Indicatori: 🟢 connesso · 🔒 cifrato · fingerprint
+ Responsive mobile
+✅ Fatto quando: puoi scrivere messaggi finti nell'interfaccia
+
+Fase 3 — Connessione P2P · 4-6h
+ Integra PeerJS (signaling gratuito)
+ Crea stanza con ID casuale + link/QR d'invito
+ Gestisci eventi: open, connection, data, close, error
+ Invia un primo messaggio di test
+✅ Fatto quando: due browser (anche in reti diverse) si parlano
+
+Fase 4 — Scambio ECDH · 4-6h
+ Ogni sessione genera una coppia ECDH P-256
+ Via DataChannel viaggia solo la chiave pubblica
+ deriveKey → chiave AES-GCM condivisa (uguale nei due lati)
+ Chiavi nuove a ogni stanza, mai salvate
+✅ Fatto quando: entrambi hanno la stessa chiave senza trasmetterla
+
+Fase 5 — Cifratura messaggi · 3-5h
+ IV nuovo e casuale per ogni messaggio (mai riutilizzarlo!)
+ Invia { iv, ciphertext }, mai testo in chiaro
+ Decifra all'arrivo; gestisci messaggi manomessi (GCM li respinge)
+ Pannello debug: mostra il ciphertext illeggibile 🕵️ (ottimo per screenshot!)
+✅ Fatto quando: intercettare il traffico non rivela nulla
+
+Fase 6 — Fingerprint anti-MITM · 3-5h (feature superstar)
+ SHA-256 delle due chiavi pubbliche → codice breve o emoji (🎮🐼🔥)
+ "Confronta fingerprint" + QR
+ Badge "✅ Verificato" solo dopo conferma manuale degli utenti
+✅ Fatto quando: due utenti si accorgono se qualcuno ha sostituito le chiavi
+
+Fase 7 — Polish · 4-6h
+ Stati di caricamento, errori chiari, riconnessione
+ Niente messaggi/chiavi salvate di default, solo HTTPS
+ Test desktop + mobile, refresh, disconnessioni
+✅ Fatto quando: funziona ovunque senza errori evidenti
+
+Fase 8 — PWA (opzionale) · 2-4h
+ Manifest + icone + service worker (GUI offline, connessione online)
+Fase 9 — README + Stardance · 2-3h
+ Spiega ECDH/AES-GCM/WebRTC/fingerprint + limiti ("demo, non auditata")
+ GIF: testo → ciphertext → testo
+ Pubblica + devlog completi
+MVP minimo: GUI → PeerJS → ECDH → AES-GCM con IV unico → messaggi cifrati → fingerprint → demo online. Devlog (13): idea → GUI → chat finta → PeerJS → primo P2P → chiavi ECDH → scambio pubbliche → primo AES → fingerprint → QR → errori → mobile → pubblicazione.
+
+🔑 Come funziona lo scambio ECDH
+L'analogia dei colori
+Alice sceglie rosso (segreto), Bob blu (segreto). Colore pubblico: giallo
+Alice invia rosso+giallo, Bob invia blu+giallo → chiunque li veda non ricostruisce i segreti (tornare indietro dal miscuglio è praticamente impossibile)
+Alice aggiunge il suo rosso alla miscela di Bob; Bob aggiunge il suo blu a quella di Alice
+→ stesso colore finale, senza mai trasmettere i segreti. ECDH fa questo con la matematica delle curve ellittiche
+I passaggi nel tuo codice
+
+// 1. Ognuno genera la propria coppia (privata resta nel dispositivo)
+const pair = await crypto.subtle.generateKey(
+  { name: "ECDH", namedCurve: "P-256" }, false, ["deriveKey"]);
+
+// 2. Viaggia SOLO questa, via DataChannel
+const pubJwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
+
+// 3. Dopo aver importato la pubblica dell'altro:
+const sharedKey = await crypto.subtle.deriveKey(
+  { name: "ECDH", public: otherPublicKey },  // la sua pubblica
+  pair.privateKey,                           // la tua privata
+  { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+// 4. → stessa chiave AES in entrambi i dispositivi ✨
+Ogni messaggio poi: encrypt con AES-GCM + IV casuale nuovo → { iv, ciphertext }.
+
+Perché serve il fingerprint?
+Un attaccante potrebbe mettersi in mezzo e sostituire le chiavi pubbliche: Alice e Bob creerebbero ciascuno un segreto... con lui, non tra loro — senza accorgersene. Il fingerprint (hash breve delle chiavi pubbliche, es. 🎮🐼🔥) si confronta a voce: se coincide sui due dispositivi, le chiavi sono autentiche.
+
+In una frase per il README: ECDH crea il segreto condiviso; il fingerprint verifica CON CHI lo stai condividendo.
